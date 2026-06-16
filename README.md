@@ -17,7 +17,7 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/yourusername/opencode-auto-learning.git
+git clone https://github.com/Jasonbr/opencode-auto-learning.git
 cd opencode-auto-learning
 
 # 运行安装脚本

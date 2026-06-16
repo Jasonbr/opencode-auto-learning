@@ -1,0 +1,114 @@
+#!/bin/bash
+# OpenCode 自动学习命令行工具
+# 手动触发记忆提取和技能生成
+
+set -e
+
+echo "🧠 OpenCode Auto Learning"
+echo "========================"
+echo ""
+
+# 检查参数
+ACTION="${1:-run}"
+
+case "$ACTION" in
+  run|start)
+    echo "📚 Phase 1: Extracting memories..."
+    python3 ~/.config/opencode/skills/auto-learning/extractor/memory_extractor.py \
+      < ~/.config/opencode/memory/sessions/latest.md \
+      2>/dev/null || echo "   No session file found"
+    
+    echo ""
+    echo "🔨 Phase 2: Generating skills..."
+    python3 ~/.config/opencode/skills/auto-learning/generator/skill_generator.py
+    
+    echo ""
+    echo "🔄 Phase 3: Syncing to Hermes..."
+    ~/bin/opencode-bridge.sh export 2>/dev/null || echo "   Sync skipped"
+    
+    echo ""
+    echo "📓 Phase 4: Syncing to Obsidian..."
+    ~/bin/obsidian-sync.py sync 2>/dev/null || echo "   Obsidian sync skipped"
+    
+    echo ""
+    echo "✅ Auto-learning completed!"
+    ;;
+    
+  status)
+    echo "📊 Learning System Status"
+    echo ""
+    
+    # 统计记忆
+    MEMORY_COUNT=$(ls ~/.config/opencode/memory/user/*.md 2>/dev/null | wc -l)
+    echo "  Memories: $MEMORY_COUNT"
+    
+    # 统计生成的技能
+    SKILL_COUNT=$(ls ~/.config/opencode/skills/auto-generated/*/SKILL.md 2>/dev/null | wc -l)
+    echo "  Auto-skills: $SKILL_COUNT"
+    
+    # 检查工作流
+    if launchctl list | grep -q "com.mem0.sync"; then
+      echo "  Scheduled sync: ✅ Running"
+    else
+      echo "  Scheduled sync: ⚠️ Not running"
+    fi
+    
+    echo ""
+    echo "Recent memories:"
+    ls -lt ~/.config/opencode/memory/user/*.md 2>/dev/null | head -5 | awk '{print "  " $9}'
+    ;;
+    
+  clean)
+    echo "🧹 Cleaning auto-generated content..."
+    rm -rf ~/.config/opencode/skills/auto-generated/*
+    echo "✅ Auto-generated skills cleared"
+    ;;
+    
+  help|--help|-h)
+    echo "Usage: opencode-auto-learn [command]"
+    echo ""
+    echo "Commands:"
+    echo "  run        Run the auto-learning pipeline (default)"
+    echo "  status     Show learning system status"
+    echo "  clean      Remove auto-generated skills"
+    echo "  help       Show this help"
+    echo ""
+    echo "Examples:"
+    echo "  opencode-auto-learn"
+    echo "  opencode-auto-learn status"
+    ;;
+    
+  *)
+    echo "Unknown command: $ACTION"
+    echo "Run 'opencode-auto-learn help' for usage"
+    exit 1
+    ;;
+esac
+
+# 新增语义搜索命令
+  semantic-search)
+    if [ -z "$2" ]; then
+      echo "Usage: opencode-auto-learn semantic-search <query>"
+      exit 1
+    fi
+    echo "🔍 Semantic search: $2"
+    python3 ~/.config/opencode/skills/auto-learning/vector/semantic_search.py search "$2"
+    ;;
+    
+  build-graph)
+    echo "🕸️ Building knowledge graph..."
+    python3 ~/.config/opencode/skills/auto-learning/graph/knowledge_graph.py build
+    echo ""
+    echo "🔍 Finding clusters..."
+    python3 ~/.config/opencode/skills/auto-learning/graph/knowledge_graph.py clusters
+    ;;
+    
+  related)
+    if [ -z "$2" ]; then
+      echo "Usage: opencode-auto-learn related <memory_id>"
+      exit 1
+    fi
+    echo "🔍 Finding related memories..."
+    python3 ~/.config/opencode/skills/auto-learning/graph/knowledge_graph.py related "$2"
+    ;;
+

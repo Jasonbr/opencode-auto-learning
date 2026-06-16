@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "mem0-memory": {
+      "type": "local",
+      "command": [
+        "sh",
+        "/Users/YOUR_USERNAME/.config/opencode/mcp-servers/mem0_wrapper.sh"
+      ],
+      "timeout": 30000
+    }
+  }
+}

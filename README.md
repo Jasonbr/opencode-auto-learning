@@ -71,3 +71,16 @@ Hermes / Obsidian
 ## 📄 License
 
 MIT License - see [LICENSE](LICENSE)
+
+## 新功能 (v1.1.0)
+
+### Phase 4: 主动推荐系统
+- 上下文分析（关键词/意图/实体）
+- 多维度推荐（关键词+意图匹配）
+- 命令: `opencode-auto-learn-recommend <text>`
+
+### Phase 5: 智能总结生成
+- 多维度总结（决策/学习/行动项）
+- 多格式输出（Markdown/JSON/Text）
+- 命令: `opencode-summary [daily|weekly|export]`
+

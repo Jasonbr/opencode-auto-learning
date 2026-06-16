@@ -1,0 +1,56 @@
+#!/bin/bash
+# OpenCode 会话总结工具
+
+set -e
+
+SCRIPT="$HOME/.config/opencode/skills/auto-learning/summarizer/session_summary.py"
+
+case "${1:-generate}" in
+    generate)
+        HOURS="${2:-24}"
+        echo "📊 生成过去 ${HOURS} 小时的会话总结..."
+        python3 "$SCRIPT" generate "$HOURS"
+        ;;
+    
+    daily)
+        echo "📊 生成每日总结..."
+        python3 "$SCRIPT" daily
+        ;;
+    
+    weekly)
+        echo "📊 生成每周总结..."
+        python3 "$SCRIPT" weekly
+        ;;
+    
+    export)
+        FORMAT="${2:-md}"
+        echo "📄 导出总结 (${FORMAT})..."
+        python3 "$SCRIPT" export "$FORMAT"
+        ;;
+    
+    help|--help|-h)
+        echo "OpenCode 会话总结工具"
+        echo ""
+        echo "用法:"
+        echo "  opencode-summary [command] [args]"
+        echo ""
+        echo "命令:"
+        echo "  generate [hours]    生成过去 N 小时的总结 (默认: 24)"
+        echo "  daily               生成每日总结并保存到 Obsidian"
+        echo "  weekly              生成每周总结"
+        echo "  export [format]     导出总结 (md/json/text)"
+        echo "  help                显示帮助"
+        echo ""
+        echo "示例:"
+        echo "  opencode-summary                    # 生成过去 24 小时总结"
+        echo "  opencode-summary generate 48        # 生成过去 48 小时总结"
+        echo "  opencode-summary daily              # 生成每日总结"
+        echo "  opencode-summary export json        # 导出 JSON 格式"
+        ;;
+    
+    *)
+        echo "未知命令: $1"
+        echo "运行 'opencode-summary help' 查看用法"
+        exit 1
+        ;;
+esac

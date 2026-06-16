@@ -1,0 +1,15 @@
+#!/bin/bash
+# 主动推荐命令
+
+TEXT="$*"
+
+if [ -z "$TEXT" ]; then
+    echo "Usage: recommend <text>"
+    echo "Example: recommend \"部署 Docker 到 Kubernetes\""
+    exit 1
+fi
+
+echo "🎯 推荐相关内容："
+echo ""
+
+python3 ~/.config/opencode/skills/auto-learning/recommender/proactive_recommender.py recommend "$TEXT"

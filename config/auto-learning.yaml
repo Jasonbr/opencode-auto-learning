@@ -1,0 +1,54 @@
+# OpenCode 自动学习工作流
+# 自动提取记忆、生成技能、同步到 Hermes
+
+name: Auto Learning Pipeline
+type: composite
+description: Automatically extract memories and generate skills from OpenCode sessions
+
+triggers:
+  - type: session_end
+    delay: 30s  # 会话结束后30秒触发
+  - type: scheduled
+    schedule: "0 */6 * * *"  # 每6小时检查一次
+  - type: manual
+    command: opencode-auto-learn
+
+tasks:
+  - name: extract-memories
+    description: Extract memories from recent sessions
+    command: python3 ~/.config/opencode/skills/auto-learning/extractor/memory_extractor.py
+    input: ~/.config/opencode/memory/sessions/latest.md
+    output: ~/.config/opencode/memory/extracted/
+    
+  - name: generate-skills
+    description: Generate skills from extracted patterns
+    command: python3 ~/.config/opencode/skills/auto-learning/generator/skill_generator.py
+    depends_on: extract-memories
+    
+  - name: sync-to-hermes
+    description: Sync memories to Hermes
+    command: ~/bin/opencode-bridge.sh export
+    depends_on: extract-memories
+    
+  - name: sync-to-obsidian
+    description: Sync to Obsidian vault
+    command: ~/bin/obsidian-sync.py sync
+    depends_on: [extract-memories, generate-skills]
+    
+  - name: update-knowledge-graph
+    description: Update knowledge graph
+    command: python3 ~/.config/opencode/skills/auto-learning/graph/update_graph.py
+    depends_on: generate-skills
+    optional: true
+
+notifications:
+  on_success:
+    - type: console
+      message: "✅ Auto-learning completed: {extracted_count} memories, {generated_count} skills"
+  on_failure:
+    - type: console
+      message: "⚠️ Auto-learning failed: {error}"
+  on_manual:
+    - type: console
+      message: "🔄 Manual learning triggered"
+

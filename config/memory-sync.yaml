@@ -1,0 +1,5 @@
+# 记忆自动同步工作流
+name: Memory Sync
+type: cron
+schedule: "0 * * * *"
+command: ~/bin/obsidian-sync.py sync

@@ -1,0 +1,27 @@
+# 每日多模态记忆同步
+
+name: Daily Multimodal Sync
+type: cron
+schedule: "0 2 * * *"  # 每天凌晨 2:00
+description: Sync all multimodal memories to Obsidian
+
+steps:
+  - name: Sync Images
+    command: |
+      echo "📸 Syncing images..."
+      find ~/.mem0/images -name "*.png" -mtime -1 | while read img; do
+        echo "Processing: $img"
+      done
+  
+  - name: Sync Code Memories
+    command: |
+      echo "💻 Syncing code memories..."
+      python3 ~/.config/opencode/skills/auto-learning/summarizer/session_summary.py daily
+  
+  - name: Generate Report
+    command: |
+      echo "📊 Generating multimodal report..."
+      opencode-summary daily
+
+notify: true
+output: ~/.mem0/logs/multimodal-sync.log

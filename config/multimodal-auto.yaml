@@ -1,0 +1,30 @@
+# 多模态记忆自动化工作流
+
+name: Multimodal Auto Capture
+description: Automatically capture images, code, and URLs
+
+# 图片自动捕获
+tasks:
+  - name: Screenshot Capture
+    trigger: file_created
+    path: ~/Desktop/Screenshots/*.png
+    action: |
+      opencode-multimodal image {{file}} "Auto-captured screenshot"
+    
+  - name: Clipboard Image
+    trigger: clipboard_image
+    action: |
+      opencode-multimodal image /tmp/clipboard.png "Clipboard image"
+
+# 代码自动索引
+  - name: Code File Index
+    trigger: file_modified
+    path: ~/.config/opencode/**/*.py
+    action: |
+      opencode-multimodal code {{file}} "Auto-indexed code"
+
+# URL 自动抓取
+  - name: URL from Clipboard
+    trigger: clipboard_url
+    action: |
+      opencode-multimodal url {{url}} "Auto-captured URL"

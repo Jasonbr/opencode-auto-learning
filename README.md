@@ -84,3 +84,39 @@ MIT License - see [LICENSE](LICENSE)
 - 多格式输出（Markdown/JSON/Text）
 - 命令: `opencode-summary [daily|weekly|export]`
 
+
+---
+
+## v1.2.0 新功能
+
+### Phase 4: 主动推荐系统 🤖
+- 上下文分析（关键词/意图/实体）
+- 多维度推荐（关键词+意图匹配）
+- 主动推送相关知识
+- **命令**: `opencode-auto-learn-recommend <text>`
+
+### Phase 5: 智能总结生成 📝
+- 多维度总结（决策/学习/行动项/技术细节）
+- 多格式输出（Markdown/JSON/Text）
+- 自动归档到 Obsidian
+- **命令**: `opencode-summary [daily|weekly|export]`
+
+### Phase 7: 多模态记忆 🖼️💻
+- 图片 OCR 和索引
+- 代码片段索引和搜索
+- 自动化工作流
+- **命令**: `opencode-multimodal [image|code|url|search]`
+
+## 完整功能矩阵
+
+| 功能 | 命令 | 状态 |
+|------|------|------|
+| 记忆提取 | `opencode-auto-learn` | ✅ |
+| 语义搜索 | `opencode-auto-learn semantic-search` | ✅ |
+| 知识图谱 | `opencode-auto-learn build-graph` | ✅ |
+| 主动推荐 | `opencode-auto-learn-recommend` | ✅ |
+| 会话总结 | `opencode-summary` | ✅ |
+| 图片 OCR | `opencode-multimodal image` | ✅ |
+| 代码索引 | `opencode-multimodal code` | ✅ |
+| 多模态搜索 | `opencode-multimodal search` | ✅ |
+

@@ -1,0 +1,60 @@
+#!/bin/bash
+# OpenCode Auto Learning Workflow V3
+# Usage: opencode-learn [export|extract|generate|full|status]
+
+set -e
+
+ACTION="${1:-full}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+case "$ACTION" in
+  full|run)
+    echo "🧠 OpenCode Auto Learning V3"
+    echo "=============================="
+    echo ""
+    
+    echo "📚 Step 1: Export sessions..."
+    python3 "$SCRIPT_DIR/export_sessions.py" 2>&1 | tail -3
+    echo ""
+    
+    echo "🧠 Step 2: Extract memories..."
+    python3 "$SCRIPT_DIR/extract_memories.py" 2>&1 | tail -3
+    echo ""
+    
+    echo "🔨 Step 3: Generate skills..."
+    python3 "$SCRIPT_DIR/generate_skills.py" 2>&1 | tail -5
+    echo ""
+    
+    echo "✅ Auto learning complete!"
+    ;;
+    
+  export)
+    python3 "$SCRIPT_DIR/export_sessions.py"
+    ;;
+    
+  extract)
+    python3 "$SCRIPT_DIR/extract_memories.py"
+    ;;
+    
+  generate)
+    python3 "$SCRIPT_DIR/generate_skills.py"
+    ;;
+    
+  status)
+    echo "📊 OpenCode Auto Learning Status"
+    echo "================================="
+    
+    sessions=$(ls ~/.config/opencode/memory/sessions/*.md 2>/dev/null | wc -l)
+    memories=$(ls ~/.config/opencode/memory/user/*.md 2>/dev/null | wc -l)
+    skills=$(ls ~/.config/opencode/skills/auto-generated/*/SKILL.md 2>/dev/null | wc -l)
+    
+    echo "Sessions: $sessions"
+    echo "Memories: $memories"
+    echo "Skills: $skills"
+    ;;
+    
+  *)
+    echo "Usage: opencode-learn [export|extract|generate|full|status]"
+    exit 1
+    ;;
+esac

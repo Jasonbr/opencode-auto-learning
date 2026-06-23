@@ -10,6 +10,78 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Set, Optional
 import re
+from difflib import SequenceMatcher
+
+class CommandNormalizer:
+    """命令标准化和去重"""
+    
+    @staticmethod
+    def normalize(cmd: str) -> str:
+        """标准化命令用于比较和泛化"""
+        normalized = cmd
+        
+        # 1. 替换用户路径
+        normalized = re.sub(r'/Users/\w+', '$HOME', normalized)
+        normalized = re.sub(r'/home/\w+', '$HOME', normalized)
+        
+        # 2. 替换时间戳
+        normalized = re.sub(r'\d{4}-\d{2}-\d{2}', 'YYYY-MM-DD', normalized)
+        normalized = re.sub(r'\d{2}:\d{2}:\d{2}', 'HH:MM:SS', normalized)
+        
+        # 3. 替换动态 ID (PID、哈希等)
+        normalized = re.sub(r'\b[0-9a-f]{8}\b', '<ID>', normalized)
+        normalized = re.sub(r'\b\d{4,}\b', '<NUM>', normalized)
+        
+        # 4. 替换 IP 地址
+        normalized = re.sub(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', '<IP>', normalized)
+        
+        return normalized.strip()
+    
+    @staticmethod
+    def similarity(cmd1: str, cmd2: str) -> float:
+        """计算命令相似度 (0-1)"""
+        norm1 = CommandNormalizer.normalize(cmd1)
+        norm2 = CommandNormalizer.normalize(cmd2)
+        return SequenceMatcher(None, norm1, norm2).ratio()
+    
+    @staticmethod
+    def deduplicate(commands: List[str], threshold: float = 0.8) -> List[str]:
+        """去重命令列表"""
+        if not commands:
+            return []
+        
+        unique_commands = []
+        normalized_seen = []
+        
+        for cmd in commands:
+            normalized = CommandNormalizer.normalize(cmd)
+            
+            # 检查是否与已有命令相似
+            is_duplicate = any(
+                CommandNormalizer.similarity(normalized, existing) > threshold
+                for existing in normalized_seen
+            )
+            
+            if not is_duplicate:
+                unique_commands.append(cmd)
+                normalized_seen.append(normalized)
+        
+        return unique_commands
+    
+    @staticmethod
+    def generalize(cmd: str) -> str:
+        """泛化命令，用变量替代具体值"""
+        generalized = cmd
+        
+        # 替换为环境变量
+        generalized = re.sub(r'/Users/\w+', '$HOME', generalized)
+        generalized = re.sub(r'/home/\w+', '$HOME', generalized)
+        
+        # 替换为占位符
+        generalized = re.sub(r'\b[0-9a-f]{8}\b', '<PID>', generalized)
+        
+        return generalized
+
 
 class SkillGenerator:
     """技能自动生成器"""
@@ -27,7 +99,7 @@ class SkillGenerator:
         }
     
     def analyze_memories(self) -> Dict[str, List[Dict]]:
-        """分析记忆，发现模式"""
+        """分析记忆，发现模式（增强版 - 支持去重）"""
         patterns = {
             "commands": [],
             "workflows": [],
@@ -57,6 +129,19 @@ class SkillGenerator:
                         "source": memory_file.name,
                         "type": "workflow"
                     })
+        
+        # 去重命令 (使用 CommandNormalizer)
+        if patterns["commands"]:
+            raw_commands = [c["content"] for c in patterns["commands"]]
+            unique_commands = CommandNormalizer.deduplicate(raw_commands, threshold=0.8)
+            
+            # 保留去重后的命令
+            patterns["commands"] = [
+                c for c in patterns["commands"] 
+                if c["content"] in unique_commands
+            ]
+            
+            print(f"  🔧 命令去重: {len(raw_commands)} → {len(unique_commands)} (减少 {len(raw_commands) - len(unique_commands)} 个)")
         
         return patterns
     

@@ -1,76 +1,120 @@
 #!/bin/bash
-# OpenCode 自动学习工作流 V3
-# 高质量记忆提取和技能生成
+# OpenCode 自动学习工作流 V3.1
+# 增强版：扩展提取模式 + 命令去重 + 结构化日志
 
 set -e
+set -o pipefail
+
+# 日志配置
+LOG_DIR="$HOME/.config/opencode/logs"
+LOG_FILE="$LOG_DIR/auto-learning.log"
+mkdir -p "$LOG_DIR"
+
+# 日志函数
+log() {
+    local level="$1"
+    local message="$2"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$timestamp] [$level] $message" | tee -a "$LOG_FILE"
+}
+
+log_info() { log "INFO" "$1"; }
+log_warn() { log "WARN" "$1"; }
+log_error() { log "ERROR" "$1"; }
+
+# 错误处理
+trap 'log_error "Exit code $? at line $LINENO"' ERR
 
 # 防套娃：PID 文件锁
 PIDFILE="/tmp/opencode-auto-learn.pid"
 if [ -f "$PIDFILE" ]; then
     old_pid=$(cat "$PIDFILE" 2>/dev/null)
     if kill -0 "$old_pid" 2>/dev/null; then
-        echo "⚠️  已有 auto-learning 进程在运行 (PID $old_pid)，跳过本次执行"
+        log_warn "已有 auto-learning 进程在运行 (PID $old_pid)，跳过本次执行"
         exit 0
     fi
 fi
 echo $$ > "$PIDFILE"
 trap 'rm -f "$PIDFILE"' EXIT
 
-echo "🧠 OpenCode Auto Learning V3"
-echo "=============================="
-echo ""
+log_info "========================================"
+log_info "OpenCode Auto Learning V3.1 启动"
+log_info "========================================"
 
 ACTION="${1:-full}"
 
+# 统计函数
+run_with_stats() {
+    local step_name="$1"
+    local cmd="$2"
+    local start_time=$(date +%s)
+    
+    log_info "开始: $step_name"
+    
+    if eval "$cmd" 2>&1 | tee -a "$LOG_FILE"; then
+        local end_time=$(date +%s)
+        local duration=$((end_time - start_time))
+        log_info "完成: $step_name (耗时 ${duration}s)"
+        return 0
+    else
+        log_error "失败: $step_name"
+        return 1
+    fi
+}
+
 case "$ACTION" in
   full|run)
-    echo "📚 Step 1: 导出最新会话..."
-    python3 ~/bin/opencode-export-sessions-v2 2>&1 | tail -5 || echo "   导出完成"
-    echo ""
+    log_info "运行完整流程"
     
-    echo "🧠 Step 2: 提取记忆..."
-    python3 ~/bin/opencode-extract-memories 2>&1 || echo "   提取完成"
-    echo ""
+    log_info "Step 1: 导出会话"
+    run_with_stats "导出会话" "python3 ~/bin/opencode-export-sessions-v2"
     
-    echo "🔨 Step 3: 生成技能 (V3)..."
-    python3 ~/bin/opencode-generate-skills-v3 2>&1 || echo "   生成完成"
-    echo ""
+    log_info "Step 2: 提取记忆"
+    run_with_stats "提取记忆" "python3 ~/bin/opencode-extract-memories"
     
-    echo "🔄 Step 4: 同步到 Hermes..."
-    ~/bin/opencode-bridge.sh export 2>/dev/null || echo "   同步完成"
-    echo ""
+    log_info "Step 3: 生成技能 (V3)"
+    run_with_stats "生成技能" "python3 ~/bin/opencode-generate-skills-v3"
     
-    echo "📊 状态报告:"
-    echo "   - 会话: $(ls ~/.config/opencode/memory/sessions/*.md 2>/dev/null | wc -l) 个"
-    echo "   - 记忆: $(ls ~/.config/opencode/memory/user/*.md 2>/dev/null | wc -l) 个"
-    echo "   - 技能: $(ls ~/.config/opencode/skills/auto-generated/*/SKILL.md 2>/dev/null | wc -l) 个"
-    echo ""
-    echo "✅ 自动学习完成!"
+    log_info "Step 4: 同步到 Hermes"
+    run_with_stats "Hermes同步" "~/bin/opencode-bridge.sh export"
+    
+    # 统计
+    SESSION_COUNT=$(ls ~/.config/opencode/memory/sessions/*.md 2>/dev/null | wc -l)
+    MEMORY_COUNT=$(ls ~/.config/opencode/memory/user/*.md 2>/dev/null | wc -l)
+    SKILL_COUNT=$(ls ~/.config/opencode/skills/auto-generated/*/SKILL.md 2>/dev/null | wc -l)
+    
+    log_info "========================================"
+    log_info "流程完成统计:"
+    log_info "  - 会话: $SESSION_COUNT 个"
+    log_info "  - 记忆: $MEMORY_COUNT 个"
+    log_info "  - 技能: $SKILL_COUNT 个"
+    log_info "  - 日志: $LOG_FILE"
+    log_info "========================================"
     ;;
     
   export)
-    echo "📚 导出会话..."
-    python3 ~/bin/opencode-export-sessions-v2
+    log_info "导出会话..."
+    python3 ~/bin/opencode-export-sessions-v2 2>&1 | tee -a "$LOG_FILE"
     ;;
     
   extract)
-    echo "🧠 提取记忆..."
-    python3 ~/bin/opencode-extract-memories
+    log_info "提取记忆..."
+    python3 ~/bin/opencode-extract-memories 2>&1 | tee -a "$LOG_FILE"
     ;;
     
   generate)
-    echo "🔨 生成技能 (V3)..."
-    python3 ~/bin/opencode-generate-skills-v3
+    log_info "生成技能 (V3)..."
+    python3 ~/bin/opencode-generate-skills-v3 2>&1 | tee -a "$LOG_FILE"
     ;;
     
   sync)
-    echo "🔄 同步到 Hermes..."
-    ~/bin/opencode-bridge.sh export
+    log_info "同步到 Hermes..."
+    ~/bin/opencode-bridge.sh export 2>&1 | tee -a "$LOG_FILE"
     ;;
     
   status)
-    echo "📊 OpenCode 自动学习系统状态 (V3)"
-    echo "=============================="
+    echo "📊 OpenCode 自动学习系统状态 (V3.1)"
+    echo "========================================"
     echo ""
     
     # 统计数据
@@ -81,8 +125,15 @@ case "$ACTION" in
     echo "📁 会话文件: $SESSION_COUNT"
     echo "🧠 提取记忆: $MEMORY_COUNT"
     echo "🔨 生成技能: $SKILL_COUNT"
+    echo "📝 日志文件: $LOG_FILE"
     echo ""
     
+    if [ -f "$LOG_FILE" ]; then
+      echo "最近日志:"
+      tail -5 "$LOG_FILE"
+    fi
+    
+    echo ""
     if [ $MEMORY_COUNT -gt 0 ]; then
       echo "最近记忆:"
       ls -lt ~/.config/opencode/memory/user/*.md 2>/dev/null | head -3 | awk '{print "  " $9}' | sed 's/.*\///'
@@ -95,20 +146,29 @@ case "$ACTION" in
     fi
     ;;
     
+  logs)
+    if [ -f "$LOG_FILE" ]; then
+      echo "📜 查看日志 (最近 50 行):"
+      tail -50 "$LOG_FILE"
+    else
+      echo "❌ 日志文件不存在"
+    fi
+    ;;
+    
   clean)
-    echo "🧹 清理自动生成的内容..."
+    log_warn "请求清理自动生成内容"
     read -p "确定要删除所有自动生成的记忆和技能吗? (y/N) " confirm
     if [ "$confirm" = "y" ]; then
       rm -rf ~/.config/opencode/memory/user/*.md
       rm -rf ~/.config/opencode/skills/auto-generated/*/
-      echo "✅ 清理完成"
+      log_info "清理完成"
     else
-      echo "❌ 已取消"
+      log_info "已取消清理"
     fi
     ;;
     
   help|--help|-h)
-    echo "OpenCode Auto Learning V2"
+    echo "OpenCode Auto Learning V3.1"
     echo ""
     echo "用法: opencode-auto-learn [command]"
     echo ""
@@ -119,17 +179,18 @@ case "$ACTION" in
     echo "  generate   只生成技能"
     echo "  sync       只同步到 Hermes"
     echo "  status     显示系统状态"
+    echo "  logs       查看日志"
     echo "  clean      清理自动生成内容"
     echo "  help       显示帮助"
     echo ""
     echo "Examples:"
     echo "  opencode-auto-learn"
     echo "  opencode-auto-learn status"
-    echo "  opencode-auto-learn extract"
+    echo "  opencode-auto-learn logs"
     ;;
     
   *)
-    echo "未知命令: $ACTION"
+    log_error "未知命令: $ACTION"
     echo "运行 'opencode-auto-learn help' 查看用法"
     exit 1
     ;;

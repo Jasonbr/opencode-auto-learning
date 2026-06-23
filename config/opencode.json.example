@@ -1,0 +1,13 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "mem0-memory": {
+      "type": "local",
+      "command": [
+        "sh",
+        "~/.config/opencode/mcp-servers/mem0_wrapper.sh"
+      ],
+      "timeout": 30000
+    }
+  }
+}

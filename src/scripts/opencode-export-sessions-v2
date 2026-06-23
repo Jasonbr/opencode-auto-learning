@@ -1,0 +1,197 @@
+#!/usr/bin/env python3
+"""
+OpenCode 会话导出器 V2 - 优化版
+从 SQLite 数据库正确导出历史会话记录，包含完整内容
+"""
+
+import sqlite3
+import json
+from pathlib import Path
+from datetime import datetime
+from typing import List, Dict, Optional
+
+class SessionExporter:
+    """会话导出器 V2"""
+    
+    def __init__(self, db_path: Optional[Path] = None):
+        if db_path is None:
+            db_path = Path.home() / ".local" / "share" / "opencode" / "opencode-.db"
+        self.db_path = db_path
+        self.sessions_dir = Path.home() / ".config" / "opencode" / "memory" / "sessions"
+        self.sessions_dir.mkdir(parents=True, exist_ok=True)
+        print(f"📂 导出目录: {self.sessions_dir}")
+        print(f"📊 数据库: {self.db_path}")
+    
+    def _format_timestamp(self, ts: int) -> str:
+        """格式化时间戳 (毫秒 -> ISO)"""
+        return datetime.fromtimestamp(ts / 1000).isoformat()
+    
+    def get_sessions(self, limit: Optional[int] = None) -> List[Dict]:
+        """获取所有会话"""
+        conn = sqlite3.connect(str(self.db_path))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT id, project_id, title, directory, version,
+                   time_created, time_updated, summary_additions, summary_deletions
+            FROM session
+            ORDER BY time_created DESC
+            LIMIT ?
+        """, (limit or 10000,))
+        
+        sessions = []
+        for row in cursor.fetchall():
+            sessions.append({
+                "id": row["id"],
+                "project_id": row["project_id"],
+                "title": row["title"] or "Untitled Session",
+                "directory": row["directory"],
+                "version": row["version"],
+                "created_at": self._format_timestamp(row["time_created"]),
+                "updated_at": self._format_timestamp(row["time_updated"]),
+                "additions": row["summary_additions"] or 0,
+                "deletions": row["summary_deletions"] or 0
+            })
+        
+        conn.close()
+        return sessions
+    
+    def get_session_messages(self, session_id: str) -> List[Dict]:
+        """获取会话的消息，从 part 表读取内容"""
+        conn = sqlite3.connect(str(self.db_path))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # 从 part 表读取内容
+        cursor.execute("""
+            SELECT p.id, p.message_id, p.time_created, p.data
+            FROM part p
+            JOIN message m ON p.message_id = m.id
+            WHERE m.session_id = ?
+            ORDER BY p.time_created ASC
+        """, (session_id,))
+        
+        messages = []
+        seen_contents = set()  # 去重
+        
+        for row in cursor.fetchall():
+            try:
+                data = json.loads(row["data"]) if row["data"] else {}
+                
+                # part 表中的内容 - 处理不同格式
+                part_type = data.get("type", "")
+                text = ""
+                
+                if part_type == "text":
+                    text = data.get("text", "")
+                elif part_type == "thinking":
+                    text = data.get("text", "")  # 思考内容
+                elif "text" in data:
+                    text = data["text"]
+                
+                # 提取角色（从 message 关联）
+                cursor2 = conn.cursor()
+                cursor2.execute("SELECT data FROM message WHERE id = ?", (row["message_id"],))
+                msg_row = cursor2.fetchone()
+                role = "unknown"
+                if msg_row:
+                    try:
+                        msg_data = json.loads(msg_row[0])
+                        role = msg_data.get("role", "unknown")
+                    except:
+                        pass
+                cursor2.close()
+                
+                # 过滤系统消息、空消息和重复内容
+                if role != "system" and text.strip():
+                    text_normalized = text.strip()[:100]  # 前100字符用于去重
+                    if text_normalized not in seen_contents:
+                        seen_contents.add(text_normalized)
+                        messages.append({
+                            "id": row["id"],
+                            "role": role,
+                            "created_at": self._format_timestamp(row["time_created"]),
+                            "content": text.strip()
+                        })
+            except Exception as e:
+                continue
+        
+        conn.close()
+        return messages
+    
+    def export_session(self, session: Dict) -> Optional[Path]:
+        """导出单个会话到 Markdown"""
+        session_id = session["id"]
+        messages = self.get_session_messages(session_id)
+        
+        if len(messages) < 2:  # 跳过消息太少的会话
+            return None
+        
+        # 生成文件名
+        date = session["created_at"][:10] if session["created_at"] else datetime.now().strftime("%Y-%m-%d")
+        safe_desc = "".join(c if c.isalnum() or c in "-_" else "_" for c in session["title"][:40])
+        filename = f"{date}_{session_id[:8]}_{safe_desc}.md"
+        filepath = self.sessions_dir / filename
+        
+        # 写入 Markdown
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(f"""---
+title: {session['title']}
+date: {session['created_at']}
+updated: {session['updated_at']}
+session_id: {session['id']}
+message_count: {len(messages)}
+---
+
+# {session['title']}
+
+## 会话信息
+- **工作目录**: `{session['directory']}`
+- **创建时间**: {session['created_at']}
+- **消息数**: {len(messages)}
+
+## 对话内容
+
+""")
+            
+            for msg in messages:
+                role_icon = "👤" if msg["role"] == "user" else "🤖"
+                f.write(f"\n### {role_icon} {msg['role'].upper()}\n\n")
+                f.write(f"{msg['content']}\n")
+        
+        print(f"  ✅ 导出: {filename} ({len(messages)} 条消息)")
+        return filepath
+    
+    def export_all(self, limit: int = 50):
+        """导出所有会话"""
+        print("🚀 开始导出 OpenCode 会话...\n")
+        
+        sessions = self.get_sessions(limit)
+        print(f"📊 找到 {len(sessions)} 个会话\n")
+        
+        exported = 0
+        for session in sessions:
+            filepath = self.export_session(session)
+            if filepath:
+                exported += 1
+        
+        print(f"\n✅ 成功导出 {exported} 个有效会话")
+        
+        # 更新 latest.md
+        if exported > 0:
+            md_files = sorted(self.sessions_dir.glob("*.md"), key=lambda x: x.stat().st_mtime, reverse=True)
+            if md_files and md_files[0].name != "latest.md":
+                import shutil
+                shutil.copy(md_files[0], self.sessions_dir / "latest.md")
+                print(f"📝 latest.md 已更新")
+        
+        return exported
+
+def main():
+    exporter = SessionExporter()
+    exporter.export_all(50)
+    print("\n💡 提示: 运行 `opencode-auto-learn` 开始自动学习")
+
+if __name__ == "__main__":
+    main()

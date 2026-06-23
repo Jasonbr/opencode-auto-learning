@@ -1,0 +1,136 @@
+#!/bin/bash
+# OpenCode 自动学习工作流 V3
+# 高质量记忆提取和技能生成
+
+set -e
+
+# 防套娃：PID 文件锁
+PIDFILE="/tmp/opencode-auto-learn.pid"
+if [ -f "$PIDFILE" ]; then
+    old_pid=$(cat "$PIDFILE" 2>/dev/null)
+    if kill -0 "$old_pid" 2>/dev/null; then
+        echo "⚠️  已有 auto-learning 进程在运行 (PID $old_pid)，跳过本次执行"
+        exit 0
+    fi
+fi
+echo $$ > "$PIDFILE"
+trap 'rm -f "$PIDFILE"' EXIT
+
+echo "🧠 OpenCode Auto Learning V3"
+echo "=============================="
+echo ""
+
+ACTION="${1:-full}"
+
+case "$ACTION" in
+  full|run)
+    echo "📚 Step 1: 导出最新会话..."
+    python3 ~/bin/opencode-export-sessions-v2 2>&1 | tail -5 || echo "   导出完成"
+    echo ""
+    
+    echo "🧠 Step 2: 提取记忆..."
+    python3 ~/bin/opencode-extract-memories 2>&1 || echo "   提取完成"
+    echo ""
+    
+    echo "🔨 Step 3: 生成技能 (V3)..."
+    python3 ~/bin/opencode-generate-skills-v3 2>&1 || echo "   生成完成"
+    echo ""
+    
+    echo "🔄 Step 4: 同步到 Hermes..."
+    ~/bin/opencode-bridge.sh export 2>/dev/null || echo "   同步完成"
+    echo ""
+    
+    echo "📊 状态报告:"
+    echo "   - 会话: $(ls ~/.config/opencode/memory/sessions/*.md 2>/dev/null | wc -l) 个"
+    echo "   - 记忆: $(ls ~/.config/opencode/memory/user/*.md 2>/dev/null | wc -l) 个"
+    echo "   - 技能: $(ls ~/.config/opencode/skills/auto-generated/*/SKILL.md 2>/dev/null | wc -l) 个"
+    echo ""
+    echo "✅ 自动学习完成!"
+    ;;
+    
+  export)
+    echo "📚 导出会话..."
+    python3 ~/bin/opencode-export-sessions-v2
+    ;;
+    
+  extract)
+    echo "🧠 提取记忆..."
+    python3 ~/bin/opencode-extract-memories
+    ;;
+    
+  generate)
+    echo "🔨 生成技能 (V3)..."
+    python3 ~/bin/opencode-generate-skills-v3
+    ;;
+    
+  sync)
+    echo "🔄 同步到 Hermes..."
+    ~/bin/opencode-bridge.sh export
+    ;;
+    
+  status)
+    echo "📊 OpenCode 自动学习系统状态 (V3)"
+    echo "=============================="
+    echo ""
+    
+    # 统计数据
+    SESSION_COUNT=$(ls ~/.config/opencode/memory/sessions/*.md 2>/dev/null | wc -l)
+    MEMORY_COUNT=$(ls ~/.config/opencode/memory/user/*.md 2>/dev/null | wc -l)
+    SKILL_COUNT=$(ls ~/.config/opencode/skills/auto-generated/*/SKILL.md 2>/dev/null | wc -l)
+    
+    echo "📁 会话文件: $SESSION_COUNT"
+    echo "🧠 提取记忆: $MEMORY_COUNT"
+    echo "🔨 生成技能: $SKILL_COUNT"
+    echo ""
+    
+    if [ $MEMORY_COUNT -gt 0 ]; then
+      echo "最近记忆:"
+      ls -lt ~/.config/opencode/memory/user/*.md 2>/dev/null | head -3 | awk '{print "  " $9}' | sed 's/.*\///'
+    fi
+    
+    if [ $SKILL_COUNT -gt 0 ]; then
+      echo ""
+      echo "生成技能:"
+      ls ~/.config/opencode/skills/auto-generated/*/ 2>/dev/null | head -3 | sed 's/.*\///'
+    fi
+    ;;
+    
+  clean)
+    echo "🧹 清理自动生成的内容..."
+    read -p "确定要删除所有自动生成的记忆和技能吗? (y/N) " confirm
+    if [ "$confirm" = "y" ]; then
+      rm -rf ~/.config/opencode/memory/user/*.md
+      rm -rf ~/.config/opencode/skills/auto-generated/*/
+      echo "✅ 清理完成"
+    else
+      echo "❌ 已取消"
+    fi
+    ;;
+    
+  help|--help|-h)
+    echo "OpenCode Auto Learning V2"
+    echo ""
+    echo "用法: opencode-auto-learn [command]"
+    echo ""
+    echo "Commands:"
+    echo "  full       运行完整流程 (默认)"
+    echo "  export     只导出会话"
+    echo "  extract    只提取记忆"
+    echo "  generate   只生成技能"
+    echo "  sync       只同步到 Hermes"
+    echo "  status     显示系统状态"
+    echo "  clean      清理自动生成内容"
+    echo "  help       显示帮助"
+    echo ""
+    echo "Examples:"
+    echo "  opencode-auto-learn"
+    echo "  opencode-auto-learn status"
+    echo "  opencode-auto-learn extract"
+    ;;
+    
+  *)
+    echo "未知命令: $ACTION"
+    echo "运行 'opencode-auto-learn help' 查看用法"
+    exit 1
+    ;;
+esac

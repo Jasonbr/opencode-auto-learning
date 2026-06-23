@@ -1,0 +1,300 @@
+#!/usr/bin/env python3
+"""
+OpenCode 智能记忆提取器 V2
+使用 AI 分析会话内容，智能提取关键信息
+"""
+
+import json
+import re
+from pathlib import Path
+from datetime import datetime
+from typing import List, Dict, Optional
+import hashlib
+
+class MemoryExtractorV2:
+    """智能记忆提取器 V2 - 增强版"""
+    
+    def __init__(self):
+        self.memory_dir = Path.home() / ".config/opencode/memory/user"
+        self.memory_dir.mkdir(parents=True, exist_ok=True)
+        
+    def extract_from_session(self, session_file: Path) -> List[Dict]:
+        """从会话文件中提取记忆"""
+        content = session_file.read_text(encoding='utf-8')
+        
+        memories = []
+        
+        # 1. 提取代码块（命令、配置）
+        memories.extend(self._extract_code_blocks(content))
+        
+        # 2. 提取关键决策（技术选择、架构决策）
+        memories.extend(self._extract_decisions(content))
+        
+        # 3. 提取解决方案（错误修复、问题处理）
+        memories.extend(self._extract_solutions(content))
+        
+        # 4. 提取学习点（新发现、理解）
+        memories.extend(self._extract_learnings(content))
+        
+        # 5. 提取技术模式（最佳实践、规范）
+        memories.extend(self._extract_patterns(content))
+        
+        return memories
+    
+    def _extract_code_blocks(self, text: str) -> List[Dict]:
+        """提取代码块中的有用命令"""
+        memories = []
+        
+        # 匹配代码块
+        patterns = [
+            (r'```bash\n(.+?)\n```', 'command'),
+            (r'```shell\n(.+?)\n```', 'command'),
+            (r'```sh\n(.+?)\n```', 'command'),
+            (r'```python\n(.+?)\n```', 'code'),
+            (r'```typescript\n(.+?)\n```', 'code'),
+            (r'```json\n(.+?)\n```', 'config'),
+            (r'```yaml\n(.+?)\n```', 'config'),
+        ]
+        
+        for pattern, mem_type in patterns:
+            matches = re.findall(pattern, text, re.DOTALL)
+            for match in matches:
+                code = match.strip()
+                if len(code) > 20 and not self._is_generic_code(code):
+                    memories.append({
+                        "type": mem_type,
+                        "content": code[:500],  # 限制长度
+                        "confidence": 0.8,
+                        "tags": ["code", "reference"]
+                    })
+        
+        return memories
+    
+    def _extract_decisions(self, text: str) -> List[Dict]:
+        """提取技术决策"""
+        memories = []
+        
+        decision_patterns = [
+            r'(?:决定|选择|采用|使用)\s*([\w\s/\-]+?)(?:作为|用于|实现|方案)',
+            r'(?:使用|采用)\s*([A-Z][a-zA-Z0-9\s/\-\.]+?)(?:来|用于|实现)',
+            r'(?:方案|架构|设计)[是为:]+\s*([\w\s/\-]+?)(?:\n|$|。)',
+            r'(?:实现|完成)[了]?\s*([\w\s/\-]+?)(?:功能|模块|组件)',
+        ]
+        
+        for pattern in decision_patterns:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            for match in matches:
+                if len(match.strip()) > 5:
+                    memories.append({
+                        "type": "decision",
+                        "content": match.strip(),
+                        "confidence": 0.7,
+                        "tags": ["architecture", "decision"]
+                    })
+        
+        return memories
+    
+    def _extract_solutions(self, text: str) -> List[Dict]:
+        """提取问题和解决方案"""
+        memories = []
+        
+        # 查找问题-解决模式
+        solution_patterns = [
+            r'(?:问题|错误|bug)[是为:]+\s*([\w\s/\-]+?)(?:解决|修复)[是为:]+\s*([\w\s/\-]+?)(?:\n|$|。)',
+            r'(?:解决|修复)[了]?\s*([\w\s/\-]+?)问题',
+            r'(?:原因|根因)[是为:]+\s*([\w\s/\-]+?)(?:\n|$|。)',
+        ]
+        
+        for pattern in solution_patterns:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            for match in matches:
+                content = match if isinstance(match, str) else " - ".join(match)
+                if len(content.strip()) > 10:
+                    memories.append({
+                        "type": "error-solution",
+                        "content": content.strip()[:300],
+                        "confidence": 0.75,
+                        "tags": ["troubleshooting", "solution"]
+                    })
+        
+        return memories
+    
+    def _extract_learnings(self, text: str) -> List[Dict]:
+        """提取学习点"""
+        memories = []
+        
+        learning_patterns = [
+            r'(?:学习|了解|发现|认识到)[到]?\s*([\w\s/\-]+?)(?:\n|$|。)',
+            r'(?:原理|机制)[是为:]+\s*([\w\s/\-]+?)(?:\n|$|。)',
+            r'(?:注意|需要|应该)\s*([\w\s/\-]+?)(?:\n|$|。)',
+        ]
+        
+        for pattern in learning_patterns:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            for match in matches:
+                if len(match.strip()) > 10 and len(match.strip()) < 200:
+                    memories.append({
+                        "type": "learning",
+                        "content": match.strip(),
+                        "confidence": 0.6,
+                        "tags": ["learning", "note"]
+                    })
+        
+        return memories
+    
+    def _extract_patterns(self, text: str) -> List[Dict]:
+        """提取重复模式和最佳实践"""
+        memories = []
+        
+        pattern_indicators = [
+            r'(?:模式|规范|约定)[是为:]+\s*([\w\s/\-]+?)(?:\n|$|。)',
+            r'(?:最佳实践|推荐|建议)\s*([\w\s/\-]+?)(?:\n|$|。)',
+            r'(?:通常|一般|习惯)\s*([\w\s/\-]+?)(?:\n|$|。)',
+        ]
+        
+        for pattern in pattern_indicators:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            for match in matches:
+                if len(match.strip()) > 10:
+                    memories.append({
+                        "type": "pattern",
+                        "content": match.strip()[:300],
+                        "confidence": 0.65,
+                        "tags": ["pattern", "best-practice"]
+                    })
+        
+        return memories
+    
+    def _is_generic_code(self, code: str) -> bool:
+        """检查是否是通用/无意义的代码"""
+        generic_patterns = [
+            r'^\s*ls\s*-la\s*$',
+            r'^\s*cd\s+',
+            r'^\s*echo\s+',
+            r'^\s*cat\s+',
+        ]
+        for pattern in generic_patterns:
+            if re.match(pattern, code):
+                return True
+        return False
+    
+    def save_memory(self, memory: Dict, session_name: str) -> Path:
+        """保存记忆到文件"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        content_hash = hashlib.md5(memory['content'].encode()).hexdigest()[:8]
+        
+        filename = f"{memory['type']}_{timestamp}_{content_hash}.md"
+        filepath = self.memory_dir / filename
+        
+        # 清理内容
+        clean_content = self._clean_content(memory['content'])
+        
+        # 检查是否已存在相似内容
+        if self._is_duplicate(clean_content):
+            return None
+        
+        # 生成更丰富的标题
+        title = self._generate_title(memory['type'], clean_content)
+        
+        content = f"""---
+type: {memory['type']}
+confidence: {memory['confidence']}
+tags: {json.dumps(memory['tags'])}
+session: {session_name}
+extracted_at: {datetime.now().isoformat()}
+---
+
+# {title}
+
+{clean_content}
+
+## 来源
+- 会话: {session_name}
+- 类型: {memory['type']}
+- 置信度: {memory['confidence']}
+"""
+        
+        filepath.write_text(content, encoding='utf-8')
+        return filepath
+    
+    def _clean_content(self, content: str) -> str:
+        """清理内容中的噪音"""
+        # 移除 Markdown 代码块标记但保留内容
+        content = re.sub(r'```\w*\n', '', content)
+        content = content.replace('```', '')
+        
+        # 移除会话来源标记
+        content = re.sub(r'- 会话:.*', '', content)
+        content = re.sub(r'- 提取时间:.*', '', content)
+        
+        # 清理多余空行
+        lines = [line.strip() for line in content.split('\n') if line.strip()]
+        return '\n'.join(lines)
+    
+    def _generate_title(self, mem_type: str, content: str) -> str:
+        """生成记忆标题"""
+        # 提取第一行作为标题
+        first_line = content.split('\n')[0][:50]
+        
+        type_names = {
+            'command': '💻 命令参考',
+            'code': '🔧 代码片段',
+            'decision': '🎯 技术决策',
+            'error-solution': '🔧 问题解决方案',
+            'learning': '📚 学习笔记',
+            'pattern': '🔄 技术模式'
+        }
+        
+        return f"{type_names.get(mem_type, '📝 记忆')} - {first_line}"
+    
+    def _is_duplicate(self, content: str) -> bool:
+        """检查是否已有相似内容"""
+        content_hash = hashlib.md5(content[:100].encode()).hexdigest()
+        for existing in self.memory_dir.glob("*.md"):
+            if content_hash in existing.name:
+                return True
+        return False
+    
+    def process_sessions(self, limit: int = 10):
+        """处理最近的会话"""
+        sessions_dir = Path.home() / ".config/opencode/memory/sessions"
+        
+        if not sessions_dir.exists():
+            print("❌ 会话目录不存在")
+            return
+        
+        # 获取最近的会话文件
+        session_files = sorted(
+            [f for f in sessions_dir.glob("*.md") if f.name != "latest.md"],
+            key=lambda x: x.stat().st_mtime,
+            reverse=True
+        )[:limit]
+        
+        print(f"🧠 处理 {len(session_files)} 个会话...\n")
+        
+        total_memories = 0
+        for session_file in session_files:
+            print(f"📄 {session_file.name}")
+            memories = self.extract_from_session(session_file)
+            
+            saved = 0
+            for memory in memories:
+                filepath = self.save_memory(memory, session_file.name)
+                if filepath:
+                    saved += 1
+            
+            if saved > 0:
+                print(f"   ✅ 提取 {saved} 条记忆")
+                total_memories += saved
+            else:
+                print(f"   ℹ️ 无新记忆")
+        
+        print(f"\n✅ 共提取 {total_memories} 条新记忆")
+        print(f"📂 保存位置: {self.memory_dir}")
+
+def main():
+    extractor = MemoryExtractorV2()
+    extractor.process_sessions(20)
+
+if __name__ == "__main__":
+    main()
